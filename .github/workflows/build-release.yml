@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# cimatrix — build, test, release, SLSA Level 3 attest
+
+name: build-release
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CISPEC_ORGANIZATION: daplanet
+  CISPEC_ORGUNIT:      dps
+  CISPEC_APPLICATION:  cimatrix
+  CISPEC_VERSION:      ${{ github.ref_name }}
+
+jobs:
+  # ----------------------------------------------------------------
+  # OPA gate check — all .rego files in policy/
+  # ----------------------------------------------------------------
+  gate-check:
+    name: opa check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -sL -o /usr/local/bin/opa \
+            https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+
+      - name: Check all Rego gates
+        run: |
+          find policy/ -name '*.rego' -print0 | \
+            xargs -0 -I{} opa check {}
+
+  # ----------------------------------------------------------------
+  # Build
+  # ----------------------------------------------------------------
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    needs: gate-check
+    outputs:
+      binary: ${{ steps.build.outputs.binary }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Roswell
+        run: |
+          curl -sL https://raw.githubusercontent.com/roswell/roswell/master/scripts/install-for-ci.sh | sh
+          echo "$HOME/.roswell/bin" >> $GITHUB_PATH
+
+      - name: Install qlot
+        run: ros install qlot
+
+      - name: Install dependencies
+        run: qlot install
+
+      - name: Build binary
+        id: build
+        run: |
+          CISPEC_VERSION="${GITHUB_REF_NAME:-0.0.0-dev}" \
+          qlot exec ros build roswell/cimatrix.ros
+          echo "binary=cimatrix" >> $GITHUB_OUTPUT
+
+      - name: Verify own attribution
+        run: |
+          strings ./cimatrix | grep '^org\.cispec\.'
+          strings ./cimatrix | grep 'org.cispec.application=cimatrix'
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cimatrix-linux-amd64
+          path: cimatrix
+
+  # ----------------------------------------------------------------
+  # BATS tests
+  # ----------------------------------------------------------------
+  test:
+    name: bats
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cimatrix-linux-amd64
+
+      - name: Make executable
+        run: chmod +x cimatrix
+
+      - name: Install BATS and OPA
+        run: |
+          sudo apt-get install -y bats
+          curl -sL -o /usr/local/bin/opa \
+            https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+
+      - name: Run tests
+        run: bats tests/
+
+  # ----------------------------------------------------------------
+  # Release + SLSA Level 3 attestation
+  # ----------------------------------------------------------------
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents:      write
+      id-token:      write   # SLSA OIDC
+      attestations:  write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cimatrix-linux-amd64
+
+      - name: Rename binary with platform suffix
+        run: |
+          mv cimatrix cimatrix-linux-amd64
+          chmod +x cimatrix-linux-amd64
+
+      - name: Generate SHA-256 digest
+        run: |
+          openssl dgst -sha256 cimatrix-linux-amd64 | \
+            awk '{print $2}' > cimatrix-linux-amd64.sha256
+
+      - name: SLSA Level 3 attestation
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2
+        with:
+          base64-subjects: ${{ steps.hash.outputs.hash }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cimatrix-linux-amd64
+            cimatrix-linux-amd64.sha256
+            cimatrix-linux-amd64.intoto.jsonl
+          generate_release_notes: true

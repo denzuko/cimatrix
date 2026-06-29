@@ -1,0 +1,141 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# cimatrix GitHub Action
+# Usage: uses: denzuko/cimatrix@v1
+
+name: "cimatrix — org.cispec conformance"
+description: "Verify org.cispec Change Item attribution conformance in binaries, Rego gates, and SLSA attestations."
+author: "Da Planet Security <FC13F74B@cispec.org>"
+
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  binary:
+    description: "Path to compiled binary for verify-binary"
+    required: false
+  gate-dir:
+    description: "Directory of .rego gate files for verify-gate"
+    required: false
+  gate-file:
+    description: "Single .rego gate file for verify-gate"
+    required: false
+  gate-input:
+    description: "JSON input file for gate evaluation"
+    required: false
+  slsa-provenance:
+    description: "Path to .intoto.jsonl provenance file for verify-slsa"
+    required: false
+  source-uri:
+    description: "Source repository URI for SLSA verification (e.g. github.com/org/repo)"
+    required: false
+  builder-id:
+    description: "SLSA builder ID URI (optional)"
+    required: false
+  sarif-output:
+    description: "Path to write SARIF report (uploaded as artefact)"
+    required: false
+    default: "cimatrix.sarif"
+  offline:
+    description: "Skip remote gate bundle pull; use cached gates only"
+    required: false
+    default: "false"
+  cimatrix-version:
+    description: "cimatrix release version to install"
+    required: false
+    default: "latest"
+
+outputs:
+  result:
+    description: "PASS or FAIL"
+    value: ${{ steps.cimatrix.outputs.result }}
+  violations:
+    description: "Number of conformance violations found"
+    value: ${{ steps.cimatrix.outputs.violations }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install cimatrix
+      shell: bash
+      run: |
+        VERSION="${{ inputs.cimatrix-version }}"
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+        BINARY="cimatrix-${OS}-${ARCH}"
+
+        if [ "${VERSION}" = "latest" ]; then
+          URL="https://github.com/denzuko/cimatrix/releases/latest/download/${BINARY}"
+        else
+          URL="https://github.com/denzuko/cimatrix/releases/download/${VERSION}/${BINARY}"
+        fi
+
+        curl -sLf -o /usr/local/bin/cimatrix "${URL}"
+        chmod +x /usr/local/bin/cimatrix
+
+        # Verify the binary's own org.cispec attribution before using it
+        strings /usr/local/bin/cimatrix | grep '^org\.cispec\.'
+
+    - name: Verify binary
+      id: verify-binary
+      if: inputs.binary != ''
+      shell: bash
+      run: |
+        cimatrix verify-binary "${{ inputs.binary }}" \
+          --sarif "${{ inputs.sarif-output }}"
+
+    - name: Verify gate (directory)
+      if: inputs.gate-dir != '' && inputs.gate-file == ''
+      shell: bash
+      run: |
+        OFFLINE_FLAG=""
+        [ "${{ inputs.offline }}" = "true" ] && OFFLINE_FLAG="--offline"
+
+        for gate in ${{ inputs.gate-dir }}/*.rego; do
+          INPUT_FLAG=""
+          [ -n "${{ inputs.gate-input }}" ] && INPUT_FLAG="--input ${{ inputs.gate-input }}"
+          cimatrix verify-gate "${gate}" ${INPUT_FLAG} ${OFFLINE_FLAG} \
+            --sarif "${{ inputs.sarif-output }}"
+        done
+
+    - name: Verify gate (single file)
+      if: inputs.gate-file != ''
+      shell: bash
+      run: |
+        OFFLINE_FLAG=""
+        [ "${{ inputs.offline }}" = "true" ] && OFFLINE_FLAG="--offline"
+        INPUT_FLAG=""
+        [ -n "${{ inputs.gate-input }}" ] && INPUT_FLAG="--input ${{ inputs.gate-input }}"
+
+        cimatrix verify-gate "${{ inputs.gate-file }}" \
+          ${INPUT_FLAG} ${OFFLINE_FLAG} \
+          --sarif "${{ inputs.sarif-output }}"
+
+    - name: Verify SLSA
+      if: inputs.slsa-provenance != '' && inputs.source-uri != ''
+      shell: bash
+      run: |
+        BUILDER_FLAG=""
+        [ -n "${{ inputs.builder-id }}" ] && BUILDER_FLAG="--builder-id ${{ inputs.builder-id }}"
+
+        cimatrix verify-slsa \
+          "${{ inputs.binary }}" \
+          "${{ inputs.slsa-provenance }}" \
+          --source-uri "${{ inputs.source-uri }}" \
+          ${BUILDER_FLAG} \
+          --sarif "${{ inputs.sarif-output }}"
+
+    - name: Upload SARIF report
+      if: always() && inputs.sarif-output != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: cimatrix-sarif
+        path: ${{ inputs.sarif-output }}
+        if-no-files-found: ignore
+
+    - name: Upload SARIF to GitHub Security tab
+      if: always() && inputs.sarif-output != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-output }}
+      continue-on-error: true  # not available on all plan tiers

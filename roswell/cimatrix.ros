@@ -1,0 +1,22 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#|
+SPDX-License-Identifier: BSD-2-Clause
+cimatrix.ros — Roswell build entry point
+Build: qlot exec ros build roswell/cimatrix.ros
+|#
+exec ros -Q -- $0 "$@"
+|#
+
+(progn
+  (ros:ensure-asdf)
+  #+quicklisp (ql:quickload '("cimatrix") :silent t))
+
+(defpackage :ros.script.cimatrix
+  (:use :cl))
+
+(in-package :ros.script.cimatrix)
+
+(defun main (&rest argv)
+  (declare (ignorable argv))
+  (cimatrix/cli:main))
