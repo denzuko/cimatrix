@@ -15,9 +15,9 @@ Three subcommands, three source files:
 
 | Subcommand | Source | Delegates to |
 |---|---|---|
-| `verify-binary` | `src/strings-extract.lisp` | `strings(1)` |
-| `verify-gate` | `src/gate-runner.lisp` | `opa eval` |
-| `verify-slsa` | `src/slsa-runner.lisp` | `slsa-verifier` |
+| `binary` | `src/strings-extract.lisp` | `strings(1)` |
+| `gate` | `src/gate-runner.lisp` | `opa eval` |
+| `slsa` | `src/slsa-runner.lisp` | `slsa-verifier` |
 
 `src/cli.lisp` wires them together via `adopt`.  
 `src/report.lisp` handles terminal output and SARIF 2.1.0 generation.  
@@ -30,7 +30,7 @@ qlot exec ros build roswell/cimatrix.ros
 ```
 
 One binary, no shared Lisp runtime. The binary self-attests with
-`org.cispec.*` strings verifiable by `cimatrix verify-binary cimatrix`.
+`org.cispec.*` strings verifiable by `cimatrix binary cimatrix`.
 
 ## Test workflow
 
@@ -65,5 +65,5 @@ Scope: `cli`, `gate`, `slsa`, `binary`, `cache`, `report`, `ci`, `docs`.
 
 ## Attribution rule
 
-The cimatrix binary must itself be verifiable by `cimatrix verify-binary cimatrix`.
+The cimatrix binary must itself be verifiable by `cimatrix binary cimatrix`.
 Every release build runs this self-check in CI before tagging.

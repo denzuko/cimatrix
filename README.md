@@ -9,13 +9,13 @@ Change Item attribution standard.
 
 ```sh
 # Verify a binary carries org.cispec.* attribution strings
-cimatrix verify-binary ./my-binary
+cimatrix binary ./my-binary
 
 # Verify a Rego gate against the cispec standard
-cimatrix verify-gate ./policy/slsa.rego --input attestation.json
+cimatrix gate ./policy/slsa.rego --input attestation.json
 
 # Verify a SLSA provenance attestation
-cimatrix verify-slsa ./my-binary ./my-binary.intoto.jsonl \
+cimatrix slsa ./my-binary ./my-binary.intoto.jsonl \
   --source-uri github.com/denzuko/my-tool
 ```
 

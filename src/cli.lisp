@@ -10,9 +10,9 @@
 (adopt:define-string *help-text*
   "cimatrix — org.cispec Change Item attribution validator~2%~
    Usage:~%~
-     cimatrix verify-binary <binary>~%~
-     cimatrix verify-gate   <gate.rego> [--input <file>] [--offline]~%~
-     cimatrix verify-slsa   <artefact> <provenance.jsonl> --source-uri <uri>~2%~
+     cimatrix binary <binary>~%~
+     cimatrix gate <gate.rego> [--input <file>] [--offline]~%~
+     cimatrix slsa <artefact> <provenance.jsonl> --source-uri <uri>~2%~
    Exit codes:~%~
      0  Verified conformance~%~
      1  Violations found~%~
@@ -92,12 +92,12 @@
 ;;; Subcommand dispatch
 ;;; ----------------------------------------------------------------
 
-(defun cmd-verify-binary (args opts)
+(defun cmd-binary (args opts)
   (unless args
-    (format *error-output* "Usage: cimatrix verify-binary <binary>~%")
+    (format *error-output* "Usage: cimatrix binary <binary>~%")
     (uiop:quit 2))
   (let* ((path   (car args))
-         (result (cimatrix/strings-extract:verify-binary path))
+         (result (cimatrix/strings-extract:binary path))
          (report (cimatrix/report:make-report
                    :pass       (getf result :pass)
                    :violations (getf result :violations)
@@ -108,14 +108,14 @@
     (maybe-write-sarif report (gethash 'sarif opts))
     (uiop:quit (cimatrix/report:exit-code report))))
 
-(defun cmd-verify-gate (args opts)
+(defun cmd-gate (args opts)
   (unless args
-    (format *error-output* "Usage: cimatrix verify-gate <gate.rego> [--input FILE]~%")
+    (format *error-output* "Usage: cimatrix gate <gate.rego> [--input FILE]~%")
     (uiop:quit 2))
   (let* ((gate-path  (car args))
          (input-path (gethash 'input opts))
          (offline    (gethash 'offline opts))
-         (result     (cimatrix/gate-runner:verify-gate
+         (result     (cimatrix/gate-runner:gate
                        gate-path
                        :input-path input-path
                        :offline    offline))
@@ -128,19 +128,19 @@
     (maybe-write-sarif report (gethash 'sarif opts))
     (uiop:quit (cimatrix/report:exit-code report))))
 
-(defun cmd-verify-slsa (args opts)
+(defun cmd-slsa (args opts)
   (unless (>= (length args) 2)
     (format *error-output*
-            "Usage: cimatrix verify-slsa <artefact> <provenance.jsonl> --source-uri <uri>~%")
+            "Usage: cimatrix slsa <artefact> <provenance.jsonl> --source-uri <uri>~%")
     (uiop:quit 2))
   (let* ((artefact-path   (first args))
          (provenance-path (second args))
          (source-uri      (gethash 'source-uri opts))
          (builder-id      (gethash 'builder-id opts)))
     (unless source-uri
-      (format *error-output* "error: --source-uri is required for verify-slsa~%")
+      (format *error-output* "error: --source-uri is required for slsa~%")
       (uiop:quit 2))
-    (let* ((result (cimatrix/slsa-runner:verify-slsa
+    (let* ((result (cimatrix/slsa-runner:slsa
                      artefact-path
                      provenance-path
                      source-uri
@@ -178,12 +178,12 @@
     (let ((subcommand (car args))
           (rest-args  (cdr args)))
       (cond
-        ((string= subcommand "verify-binary") (cmd-verify-binary rest-args opts))
-        ((string= subcommand "verify-gate")   (cmd-verify-gate   rest-args opts))
-        ((string= subcommand "verify-slsa")   (cmd-verify-slsa   rest-args opts))
+        ((string= subcommand "binary") (cmd-binary rest-args opts))
+        ((string= subcommand "gate")   (cmd-gate   rest-args opts))
+        ((string= subcommand "slsa")   (cmd-slsa   rest-args opts))
         (t
          (format *error-output*
                  "error: unknown subcommand ~S~%~%~A~%"
                  subcommand
-                 "Subcommands: verify-binary  verify-gate  verify-slsa")
+                 "Subcommands: binary  gate  slsa")
          (uiop:quit 2))))))

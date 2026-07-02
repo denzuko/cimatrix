@@ -9,7 +9,7 @@ setup_file() {
     mkdir -p "${FIXTURES}"
 
     # Build a minimal conformant binary using the cimatrix binary itself
-    # (cimatrix verify-binary cimatrix is a valid self-test)
+    # (cimatrix binary cimatrix is a valid self-test)
 
     # Minimal conformant labels JSON
     cat > "${FIXTURES}/labels-pass.json" <<'EOF'

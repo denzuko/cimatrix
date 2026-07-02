@@ -12,19 +12,19 @@ branding:
 
 inputs:
   binary:
-    description: "Path to compiled binary for verify-binary"
+    description: "Path to compiled binary for binary"
     required: false
   gate-dir:
-    description: "Directory of .rego gate files for verify-gate"
+    description: "Directory of .rego gate files for gate"
     required: false
   gate-file:
-    description: "Single .rego gate file for verify-gate"
+    description: "Single .rego gate file for gate"
     required: false
   gate-input:
     description: "JSON input file for gate evaluation"
     required: false
   slsa-provenance:
-    description: "Path to .intoto.jsonl provenance file for verify-slsa"
+    description: "Path to .intoto.jsonl provenance file for slsa"
     required: false
   source-uri:
     description: "Source repository URI for SLSA verification (e.g. github.com/org/repo)"
@@ -77,11 +77,11 @@ runs:
         strings /usr/local/bin/cimatrix | grep '^org\.cispec\.'
 
     - name: Verify binary
-      id: verify-binary
+      id: binary
       if: inputs.binary != ''
       shell: bash
       run: |
-        cimatrix verify-binary "${{ inputs.binary }}" \
+        cimatrix binary "${{ inputs.binary }}" \
           --sarif "${{ inputs.sarif-output }}"
 
     - name: Verify gate (directory)
@@ -94,7 +94,7 @@ runs:
         for gate in ${{ inputs.gate-dir }}/*.rego; do
           INPUT_FLAG=""
           [ -n "${{ inputs.gate-input }}" ] && INPUT_FLAG="--input ${{ inputs.gate-input }}"
-          cimatrix verify-gate "${gate}" ${INPUT_FLAG} ${OFFLINE_FLAG} \
+          cimatrix gate "${gate}" ${INPUT_FLAG} ${OFFLINE_FLAG} \
             --sarif "${{ inputs.sarif-output }}"
         done
 
@@ -107,7 +107,7 @@ runs:
         INPUT_FLAG=""
         [ -n "${{ inputs.gate-input }}" ] && INPUT_FLAG="--input ${{ inputs.gate-input }}"
 
-        cimatrix verify-gate "${{ inputs.gate-file }}" \
+        cimatrix gate "${{ inputs.gate-file }}" \
           ${INPUT_FLAG} ${OFFLINE_FLAG} \
           --sarif "${{ inputs.sarif-output }}"
 
@@ -118,7 +118,7 @@ runs:
         BUILDER_FLAG=""
         [ -n "${{ inputs.builder-id }}" ] && BUILDER_FLAG="--builder-id ${{ inputs.builder-id }}"
 
-        cimatrix verify-slsa \
+        cimatrix slsa \
           "${{ inputs.binary }}" \
           "${{ inputs.slsa-provenance }}" \
           --source-uri "${{ inputs.source-uri }}" \
